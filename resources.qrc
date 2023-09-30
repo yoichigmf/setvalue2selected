@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/plugins/SetValue2Selected" >
+        <file>icon.png</file>
+    </qresource>
+</RCC>
