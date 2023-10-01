@@ -21,16 +21,25 @@
  *                                                                         *
  ***************************************************************************/
 """
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
+from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication,Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
+
+from qgis.core import (QgsMapLayerProxyModel,QgsFieldProxyModel,Qgis,QgsMessageLog)
+
+
+#from qgis.gui import QgsFieldProxyModel
+
+#from qgis.gui import (QgsFieldComboBox, QgsMapLayerComboBox,
+#                      QgsMapLayerProxyModel)
 
 # Initialize Qt resources from file resources.py
 from .resources import *
 # Import the code for the dialog
 from .SetValue2Selected_dialog import SetValue2SelectedDialog
-import os.path
 
+import os.path
+import logging
 
 class SetValue2Selected:
     """QGIS Plugin Implementation."""
@@ -61,7 +70,7 @@ class SetValue2Selected:
 
         # Declare instance attributes
         self.actions = []
-        self.menu = self.tr(u'&SetValue2Selected')
+        self.menu = self.tr(u'選択地物値設定')
 
         # Check if plugin was started the first time in current QGIS session
         # Must be set in initGui() to survive plugin reloads
@@ -163,22 +172,28 @@ class SetValue2Selected:
         icon_path = ':/plugins/SetValue2Selected/icon.png'
         self.add_action(
             icon_path,
-            text=self.tr(u'Set attribute values for selected features'),
+            text=self.tr(u'選択地物値設定'),
             callback=self.run,
             parent=self.iface.mainWindow())
 
         # will be set False in run()
         self.first_start = True
+        self.first_Configstart = True
+     
+       
 
 
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
         for action in self.actions:
             self.iface.removePluginVectorMenu(
-                self.tr(u'&SetValue2Selected'),
+                self.tr(u'選択地物値設定'),
                 action)
             self.iface.removeToolBarIcon(action)
 
+
+
+ 
 
     def run(self):
         """Run method that performs all the real work"""
@@ -189,6 +204,14 @@ class SetValue2Selected:
             self.first_start = False
             self.dlg = SetValue2SelectedDialog()
 
+            self.dlg.mMapLayerComboBox.setCurrentIndex(-1   )
+            self.dlg.mMapLayerComboBox.setFilters(QgsMapLayerProxyModel.VectorLayer)  #   ベクタレイヤのみ表示
+            self.dlg.mMapLayerComboBox.layerChanged.connect( self.dlg.mFieldComboBox.setLayer )   #   レイヤ選択時の処理
+            #self.dlg.mFieldComboBox.setFilters(QgsFieldProxyModel.Int | QgsFieldProxyModel.LongLong | QgsFieldProxyModel.Boolean) # v3.33 から有効
+            self.dlg.updateButton.clicked.connect( self.update_str )   #   選択更新ボタン押下時の処理
+
+            self.dlg.setWindowFlags(Qt.WindowStaysOnTopHint) #最前面表示
+
         # show the dialog
         self.dlg.show()
         # Run the dialog event loop
@@ -198,3 +221,63 @@ class SetValue2Selected:
             # Do something useful here - delete the line containing pass and
             # substitute with your code.
             pass
+
+
+
+    def  update_str(self):
+
+       
+        QgsMessageLog.logMessage("in update_str", 'SetValue2Selectet', level=Qgis.Info)
+
+        tgLayer = self.dlg.mMapLayerComboBox.currentLayer()
+
+        tgfield = self.dlg.mFieldComboBox.currentField()
+
+        if tgLayer == None:
+            
+            self.iface.messageBar().pushMessage("Error", "レイヤを選択してください", level=Qgis.Warning)
+         
+            return
+        
+        if tgfield == None:
+            self.iface.messageBar().pushMessage("Error", "カラムを選択してください", level=Qgis.Warning)
+
+           
+            return
+        tgLayer.startEditing()
+      
+        ftype = tgLayer.fields().field(tgfield).type()
+
+        QgsMessageLog.logMessage("field type = " + str(ftype), 'SetValue2Selectet', level=Qgis.Info)
+        
+
+
+        
+    
+        for feature in tgLayer.selectedFeatures():
+
+            if ftype == 10: # 文字列
+
+                 feature[tgfield] = "1"
+            if ftype == 4: # 浮動小数点
+
+
+                 feature[tgfield] = 1.0
+            elif ftype == 6: # 整数
+                 feature[tgfield] = 1
+            elif ftype == 1: # Boolean
+                 feature[tgfield] = True
+
+        
+
+            tgLayer.updateFeature(feature)
+
+        tgLayer.commitChanges()
+        tgLayer.endEditCommand()
+
+        canv = self.iface.mapCanvas()
+        canv.refreshAllLayers() 
+
+        return
+       
+       
